@@ -1,8 +1,12 @@
 import asyncio
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class UDPClient:
-    """ Async UDP client """
+    """Async UDP client"""
+
     def __init__(self, server_host, server_port):
         self.server_host = server_host
         self.server_port = server_port
@@ -17,7 +21,8 @@ class UDPClient:
         def connection_made(self, transport):
             self.transport = transport
             self.transport.sendto(self.message)
-            self.transport.close()
+            if self.transport is not None:
+                self.transport.close()
 
     class EchoClientProtocol(asyncio.DatagramProtocol):
         # Send and receive
@@ -32,12 +37,15 @@ class UDPClient:
 
         def datagram_received(self, data, addr):
             self.future.set_result(data)
-            self.transport.close()
+            if self.transport is not None:
+                self.transport.close()
 
         def error_received(self, exc):
             self.future.set_exception(exc)
 
         def connection_lost(self, exc):
+            if self.transport is not None:
+                self.transport.close()
             if not self.future.done():
                 self.future.set_exception(ConnectionError("Connection lost"))
 
@@ -45,12 +53,12 @@ class UDPClient:
         future = self.loop.create_future()
         transport, protocol = await self.loop.create_datagram_endpoint(
             lambda: self.EchoClientProtocol(bytes_to_send, future),
-            remote_addr=(self.server_host, self.server_port)
+            remote_addr=(self.server_host, self.server_port),
         )
 
         try:
             data = await asyncio.wait_for(future, timeout=5.0)
-            return data, b'0'
+            return data, b"0"
         except asyncio.TimeoutError:
             _LOGGER.error("Timeout: No response from server in 5 seconds.")
             return None
@@ -60,6 +68,6 @@ class UDPClient:
     async def send(self, bytes_to_send):
         transport, protocol = await self.loop.create_datagram_endpoint(
             lambda: self.SimpleClientProtocol(bytes_to_send),
-            remote_addr=(self.server_host, self.server_port)
+            remote_addr=(self.server_host, self.server_port),
         )
         transport.close()

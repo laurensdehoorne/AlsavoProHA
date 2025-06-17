@@ -1,24 +1,12 @@
 """Alsavo Pro pool heat pump integration."""
+
 import logging
+import asyncio
 from datetime import timedelta
-
-import async_timeout
-from homeassistant.helpers.update_coordinator import (
-    DataUpdateCoordinator,
-)
-
-from homeassistant.const import (
-    CONF_PASSWORD,
-    CONF_IP_ADDRESS,
-    CONF_PORT,
-    CONF_NAME,
-)
-
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.const import CONF_PASSWORD, CONF_IP_ADDRESS, CONF_PORT, CONF_NAME
 from .AlsavoPyCtrl import AlsavoPro
-from .const import (
-    DOMAIN,
-    SERIAL_NO,
-)
+from .const import DOMAIN, SERIAL_NO
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,23 +31,20 @@ async def async_setup_entry(hass, entry):
         hass.data[DOMAIN] = {}
     hass.data[DOMAIN][entry.entry_id] = data_coordinator
 
-    for platform in ('sensor', 'climate'):
-        # Schedule platform setup asynchronously to avoid blocking the main event loop
-        hass.async_create_task(
-            hass.config_entries.async_forward_entry_setup(entry, platform)
-        )
-
+    # Forward setup to the necessary platforms
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "climate"])
     return True
 
 
 async def async_unload_entry(hass, config_entry):
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_forward_entry_unload(
-        config_entry, "climate"
+    unload_ok = await hass.config_entries.async_unload_platforms(
+        config_entry, ["sensor", "climate"]
     )
-    unload_ok |= await hass.config_entries.async_forward_entry_unload(
-        config_entry, "sensor"
-    )
+
+    if unload_ok:
+        hass.data[DOMAIN].pop(config_entry.entry_id)
+
     return unload_ok
 
 
@@ -79,8 +64,10 @@ class AlsavoProDataCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         _LOGGER.debug("_async_update_data")
         try:
-            async with async_timeout.timeout(10):
+            async with asyncio.timeout(10):
                 await self.data_handler.update()
                 return self.data_handler
-        except Exception as ex:
+        except asyncio.TimeoutError:
             _LOGGER.debug("_async_update_data timed out")
+        except Exception as ex:
+            _LOGGER.debug("_async_update_data failed with exception: %s", ex)

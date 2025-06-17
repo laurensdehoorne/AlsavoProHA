@@ -1,11 +1,12 @@
 """Support for Alsavo Pro wifi-enabled pool heaters."""
+
 import logging
 
 from homeassistant.components.climate import (
     PLATFORM_SCHEMA,
     ClimateEntity,
     ClimateEntityFeature,
-    HVACMode
+    HVACMode,
 )
 
 from homeassistant.const import (
@@ -25,10 +26,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from . import AlsavoProDataCoordinator
-from .const import (
-    DOMAIN,
-    POWER_MODE_MAP
-)
+from .const import DOMAIN, POWER_MODE_MAP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,7 +36,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class AlsavoProClimate(CoordinatorEntity, ClimateEntity):
-    """ Climate platform for Alsavo Pro pool heater """
+    """Climate platform for Alsavo Pro pool heater"""
 
     def __init__(self, coordinator: AlsavoProDataCoordinator):
         """Initialize the heater."""
@@ -50,7 +48,9 @@ class AlsavoProClimate(CoordinatorEntity, ClimateEntity):
     @property
     def supported_features(self):
         """Return the list of supported features."""
-        return ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
+        return (
+            ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
+        )
 
     @property
     def unique_id(self):
@@ -70,11 +70,7 @@ class AlsavoProClimate(CoordinatorEntity, ClimateEntity):
     @property
     def hvac_mode(self):
         """Return hvac operation i.e. heat, cool mode."""
-        operating_mode_map = {
-            0: HVACMode.COOL,
-            1: HVACMode.HEAT,
-            2: HVACMode.AUTO
-        }
+        operating_mode_map = {0: HVACMode.COOL, 1: HVACMode.HEAT, 2: HVACMode.AUTO}
 
         if not self._data_handler.is_power_on:
             return HVACMode.OFF
@@ -92,10 +88,15 @@ class AlsavoProClimate(CoordinatorEntity, ClimateEntity):
         hvac_mode_icons = {
             HVACMode.HEAT: "mdi:fire",
             HVACMode.COOL: "mdi:snowflake",
-            HVACMode.AUTO: "mdi:refresh-auto"
+            HVACMode.AUTO: "mdi:refresh-auto",
         }
 
-        return hvac_mode_icons.get(self.hvac_mode, "mdi:hvac-off")
+        hvac_mode = self.hvac_mode
+        return (
+            hvac_mode_icons.get(hvac_mode, "mdi:hvac-off")
+            if hvac_mode is not None
+            else "mdi:hvac-off"
+        )
 
     @property
     def hvac_modes(self):
@@ -105,7 +106,7 @@ class AlsavoProClimate(CoordinatorEntity, ClimateEntity):
     @property
     def preset_modes(self):
         """Return the list of available hvac operation modes."""
-        return ['Silent', 'Smart', 'Powerful']
+        return ["Silent", "Smart", "Powerful"]
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set hvac mode."""
@@ -113,7 +114,7 @@ class AlsavoProClimate(CoordinatorEntity, ClimateEntity):
             HVACMode.OFF: self._data_handler.set_power_off,
             HVACMode.COOL: self._data_handler.set_cooling_mode,
             HVACMode.HEAT: self._data_handler.set_heating_mode,
-            HVACMode.AUTO: self._data_handler.set_auto_mode
+            HVACMode.AUTO: self._data_handler.set_auto_mode,
         }
 
         action = hvac_mode_actions.get(hvac_mode)
@@ -124,9 +125,9 @@ class AlsavoProClimate(CoordinatorEntity, ClimateEntity):
     async def async_set_preset_mode(self, preset_mode):
         """Set hvac preset mode."""
         preset_mode_to_power_mode = {
-            'Silent': 0,     # Silent
-            'Smart': 1,  # Smart
-            'Powerful': 2     # Powerful
+            "Silent": 0,  # Silent
+            "Smart": 1,  # Smart
+            "Powerful": 2,  # Powerful
         }
 
         power_mode = preset_mode_to_power_mode.get(preset_mode)
