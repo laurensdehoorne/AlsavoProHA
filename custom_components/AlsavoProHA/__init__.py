@@ -44,6 +44,7 @@ async def async_setup_entry(hass, entry):
     hass.data[DOMAIN][entry.entry_id] = data_coordinator
 
     for platform in ('sensor', 'climate'):
+        # Schedule platform setup asynchronously to avoid blocking the main event loop
         hass.async_create_task(
             hass.config_entries.async_forward_entry_setup(entry, platform)
         )
