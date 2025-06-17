@@ -1,17 +1,20 @@
+"""Alsavo Pro Ctrl."""
+
+from datetime import datetime, timezone
+from enum import Enum
 import hashlib
 import logging
 import random
 import struct
-from datetime import datetime, timezone
-from enum import Enum
 
-from .const import (
+from custom_components.alsavopro.const import (
     MAX_SET_CONFIG_RETRIES,
     MAX_UPDATE_RETRIES,
     MODE_TO_CONFIG,
     NO_WATER_FLUX,
     WATER_TEMP_TOO_LOW,
 )
+
 from .udpclient import UDPClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,7 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 class AlsavoPro:
     """Alsavo Pro data handler."""
 
-    def __init__(self, name, serial_no, ip_address, port_no, password):
+    def __init__(self, name, serial_no, ip_address, port_no, password) -> None:
         """Init Alsavo Pro data handler."""
         self._name = name
         self._serial_no = serial_no
@@ -34,7 +37,8 @@ class AlsavoPro:
         self._online = False
 
     async def update(self):
-        _LOGGER.debug(f"update")
+        """Update."""
+        _LOGGER.debug("update")
         try:
             await self._session.connect(
                 self._ip_address,
@@ -45,18 +49,19 @@ class AlsavoPro:
             data = await self._session.query_all()
             if data is not None:
                 self._data = data
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except  # noqa: BLE001
             if self._update_retries < MAX_UPDATE_RETRIES:
                 self._update_retries += 1
                 await self.update()
                 self._online = True
             else:
                 self._update_retries = 0
-                _LOGGER.error(f"Unable to update: {e}")
+                _LOGGER.error(f"Unable to update: {e}")  # noqa: G004
                 self._online = False
 
     async def set_config(self, idx: int, value: int):
-        _LOGGER.debug(f"set_config({idx}, {value})")
+        """Config."""
+        _LOGGER.debug(f"set_config({idx}, {value})")  # noqa: G004
         try:
             await self._session.connect(
                 self._ip_address,
@@ -65,97 +70,133 @@ class AlsavoPro:
                 self._password,
             )
             await self._session.set_config(idx, value)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except  # noqa: BLE001
             if self._set_retries < MAX_SET_CONFIG_RETRIES:
                 self._set_retries += 1
                 await self.set_config(idx, value)
                 self._online = True
             else:
                 self._set_retries = 0
-                _LOGGER.error(f"Unable to set config: {idx}, {value} Error: {e}")
+                _LOGGER.error(f"Unable to set config: {idx}, {value} Error: {e}")  # noqa: G004
                 self._online = False
 
     @property
     def is_online(self) -> bool:
+        """Online."""
         return self._data.parts > 0
 
     @property
     def unique_id(self):
+        """UniqueId."""
         return f"{self._name}_{self._serial_no}"
 
     @property
     def target_temperature(self):
+        """Target temp."""
         return self.get_temperature_from_config(
             MODE_TO_CONFIG.get(self.operating_mode, 0)
         )
 
     async def set_target_temperature(self, value: float):
+        """Set target temp."""
         config_key = MODE_TO_CONFIG.get(self.operating_mode)
         if config_key is not None:
             await self.set_config(config_key, int(value * 10))
 
     def get_status_value(self, idx: int):
+        """Get status value."""
         return self._data.get_status_value(idx)
 
     def get_config_value(self, idx: int):
+        """Get config value."""
         return self._data.get_config_value(idx)
 
     def get_temperature_from_status(self, idx):
+        """Get temp from value."""
         return self._data.get_status_temperature_value(idx)
 
     def get_temperature_from_config(self, idx):
+        """Get temp from config."""
         return self._data.get_config_temperature_value(idx)
 
     @property
     def water_in_temperature(self):
+        """Water in temp."""
         return self.get_temperature_from_status(16)
 
     @property
     def water_out_temperature(self):
+        """Water out temp."""
         return self.get_temperature_from_status(17)
 
     @property
     def ambient_temperature(self):
+        """Amb temp."""
         return self.get_temperature_from_status(18)
 
     @property
     def operating_mode(self):
+        """Op mode."""
         return self._data.get_config_value(4) & 3
 
     @property
     def is_timer_on_enabled(self):
+        """Timer on."""
         return self._data.get_config_value(4) & 4 == 4
 
     @property
     def water_pump_running_mode(self):
+        """WP running mode."""
         return self._data.get_config_value(4) & 8 == 8
 
     @property
     def electronic_valve_style(self):
+        """Evs."""
         return self._data.get_config_value(4) & 16 == 16
 
     @property
     def is_power_on(self):
+        """Power on."""
         return self._data.get_config_value(4) & 32 == 32
 
     @property
     def power_mode(self):
+        """Power mode."""
         return self._data.get_config_value(16)
 
     @property
     def is_debug_mode(self):
+        """Debug mode."""
         return self._data.get_config_value(4) & 64 == 64
 
     @property
     def is_timer_off_enabled(self):
+        """Timer off enabled."""
         return self._data.get_config_value(4) & 128 == 128
 
     @property
     def manual_defrost(self):
+        """Defrost."""
         return self._data.get_config_value(5) & 1 == 1
 
     @property
+    def sw_code(self):
+        """Sw code."""
+        return self._data.get_status_value(66)
+
+    @property
+    def hw_code(self):
+        """Hw code."""
+        return self._data.get_status_value(65)
+
+    @property
+    def devicetype(self):
+        """Devicetype."""
+        return self._data.get_status_value(64)
+
+    @property
     def errors(self):
+        """Errors."""
         error = ""
         if self.get_status_value(48) & 0x4 == 0x4:
             error += NO_WATER_FLUX
@@ -164,38 +205,46 @@ class AlsavoPro:
         return error
 
     async def set_power_off(self):
+        """Set power off."""
         await self.set_config(4, self._data.get_config_value(4) & 0xFFDF)
 
     async def set_cooling_mode(self):
+        """Set cooling mode."""
         await self.set_config(4, (self._data.get_config_value(4) & 0xFFDC) + 32)
 
     async def set_heating_mode(self):
+        """Set heating mode."""
         await self.set_config(4, (self._data.get_config_value(4) & 0xFFDC) + 33)
 
     async def set_auto_mode(self):
+        """Set auto mode."""
         await self.set_config(4, (self._data.get_config_value(4) & 0xFFDC) + 34)
 
     async def set_power_mode(self, value: int):
+        """Set power mode."""
         await self.set_config(16, value)
 
     @property
     def name(self):
+        """Name."""
         return self._name
 
 
 class PacketHeader:
-    """This is the packet header"""
+    """Packetheader."""
 
-    """ It consists of 16 bytes and have the following attributes: """
-    """ - hdr - byte - 0x32 = request, 0x30 = response """
-    """ - pad - byte - Padding. Always 0 """
-    """ - seq - Int16 - Sequence number (monotonically increasing once session has been set up, otherwise 0) """
-    """ - csid - Int32 - ??? """
-    """ - dsid - Int32 - ??? """
-    """ - cmd - Int16 - Command """
-    """ - Payload length - Int16 - """
+    # This is the packet header
+    # It consists of 16 bytes and have the following attributes:
+    # - hdr - byte - 0x32 = request, 0x30 = response
+    # - pad - byte - Padding. Always 0
+    # - seq - Int16 - Sequence number (monotonically increasing once session has been set up, otherwise 0)
+    # - csid - Int32 - ???
+    # - dsid - Int32 - ???
+    # - cmd - Int16 - Command
+    # - Payload length - Int16 -
 
-    def __init__(self, hdr, seq, csid, dsid, cmd, payload_length):
+    def __init__(self, hdr, seq, csid, dsid, cmd, payload_length) -> None:
+        """Init."""
         self.hdr = hdr
         self.pad = 0
         self.seq = seq
@@ -206,9 +255,11 @@ class PacketHeader:
 
     @property
     def is_reply(self):
+        """Reply."""
         return (self.hdr & 2) == 0
 
     def pack(self):
+        """Pack."""
         # Struct format: char, char, uint16, uint32, uint32, uint16, uint16
         return struct.pack(
             "!BBHIIHH",
@@ -223,6 +274,7 @@ class PacketHeader:
 
     @staticmethod
     def unpack(data):
+        """Unpack."""
         unpacked_data = struct.unpack("!BBHIIHH", data)
         return PacketHeader(
             unpacked_data[0],
@@ -235,8 +287,11 @@ class PacketHeader:
 
 
 class Timestamp:
-    def __init__(self):
-        current_time = datetime.now(timezone.utc)
+    """Timestamp."""
+
+    def __init__(self) -> None:
+        """Init."""
+        current_time = datetime.now(timezone.utc)  # noqa: UP017
         self.year = current_time.year
         self.month = current_time.month
         self.day = current_time.day
@@ -246,6 +301,7 @@ class Timestamp:
         self.tz = 2  # Placeholder
 
     def pack(self):
+        """Pack."""
         # Struct format: uint16, char, char, char, char, char, char
         return struct.pack(
             "!HBBBBBB",
@@ -260,7 +316,10 @@ class Timestamp:
 
 
 class AuthIntro:
-    def __init__(self, client_token, serial_inv):
+    """AuthIntro."""
+
+    def __init__(self, client_token, serial_inv) -> None:
+        """Init."""
         self.hdr = PacketHeader(0x32, 0, 0, 0, 0xF2, 0x28)
         self.act1, self.act2, self.act3, self.act4 = 1, 1, 2, 0
         self.clientToken = client_token
@@ -269,6 +328,7 @@ class AuthIntro:
         self.timestamp = Timestamp()
 
     def pack(self):
+        """Pack."""
         packed_hdr = self.hdr.pack()
         packed_uuid = struct.pack("!IIII", *self._uuid)
         packed_data = (
@@ -288,7 +348,10 @@ class AuthIntro:
 
 
 class AuthChallenge:
-    def __init__(self, hdr, act1, act2, act3, act4, server_token):
+    """AuthCh."""
+
+    def __init__(self, hdr, act1, act2, act3, act4, server_token) -> None:
+        """Init."""
         self.hdr = hdr
         self.act1 = act1
         self.act2 = act2
@@ -298,6 +361,7 @@ class AuthChallenge:
 
     @staticmethod
     def unpack(data):
+        """Unpack."""
         # 16 first bytes are header
         packet_hdr = PacketHeader.unpack(data[0:16])
 
@@ -308,7 +372,7 @@ class AuthChallenge:
         unpacked_data = struct.unpack(format_string, data[16:24])
 
         # Create a new instance of the class and initialize its attributes
-        obj = AuthChallenge(
+        return AuthChallenge(
             packet_hdr,
             unpacked_data[0],
             unpacked_data[1],
@@ -317,15 +381,17 @@ class AuthChallenge:
             unpacked_data[4],
         )
 
-        return obj
-
     @property
     def is_authorized(self):
+        """Is auth."""
         return self.act1 == 3 and self.act2 == 0 and self.act3 == 0 and self.act4 == 0
 
 
 class AuthResponse:
-    def __init__(self, csid, dsid, resp):
+    """AuthResponse."""
+
+    def __init__(self, csid, dsid, resp) -> None:
+        """Init."""
         # Header fields
         self.hdr = PacketHeader(0x32, 0, csid, dsid, 0xF2, 0x1C)
         self.act1, self.act2, self.act3, self.act4 = 4, 0, 0, 3
@@ -335,16 +401,18 @@ class AuthResponse:
         self.response = bytes(resp)
 
     def pack(self):
+        """Pack."""
         packed_data = struct.pack("!BBBB", self.act1, self.act2, self.act3, self.act4)
         return self.hdr.pack() + packed_data + self.response + self.timestamp.pack()
 
 
 class Payload:
-    """Config, Status or device info-payload packet"""
+    """Config, Status or device info-payload packet."""
 
-    """ Is part of the QueryResponse packet """
+    # Is part of the QueryResponse packet
 
-    def __init__(self, data_type, sub_type, size, start_idx, indices):
+    def __init__(self, data_type, sub_type, size, start_idx, indices) -> None:
+        """Init."""
         self.type = data_type
         self.subType = sub_type
         self.size = size
@@ -353,12 +421,14 @@ class Payload:
         self.data = []
 
     def get_value(self, idx):
-        if idx - self.startIdx < 0 or idx - self.startIdx > self.data.__len__():
+        """Get value."""
+        if idx - self.startIdx < 0 or idx - self.startIdx > len(self.data):
             return 0
         return self.data[idx - self.startIdx]
 
     @staticmethod
     def unpack(data):
+        """Unpack."""
         unpacked_data = struct.unpack("!IHHHH", data[0:12])
         obj = Payload(
             unpacked_data[0],
@@ -367,7 +437,7 @@ class Payload:
             unpacked_data[3],
             unpacked_data[4],
         )
-        if obj.subType == 1 or obj.subType == 2:
+        if obj.subType == 1 or obj.subType == 2:  # noqa: PLR1714
             obj.data = struct.unpack(
                 ">" + "H" * (obj.size // 2), data[12 : 12 + obj.size]
             )
@@ -383,9 +453,10 @@ class Payload:
 class QueryResponse:
     """Query response containing data payload from heatpump."""
 
-    """ Contains both status and config. """
+    # Contains both status and config.
 
-    def __init__(self, action, parts):
+    def __init__(self, action, parts) -> None:
+        """Init."""
         self.action = action
         self.parts = parts
         self.__payloads = []
@@ -394,44 +465,48 @@ class QueryResponse:
         self.__deviceInfo = None
 
     def get_status_value(self, idx: int):
+        """Status value."""
         if self.__status is None:
             return 0
-        else:
-            return self.__status.get_value(idx)
+        return self.__status.get_value(idx)
 
     def get_config_value(self, idx: int):
+        """Config value."""
         if self.__config is None:
             return 0
-        else:
-            return self.__config.get_value(idx)
+
+        return self.__config.get_value(idx)
 
     def get_signed_status_value(self, idx: int):
+        """Signed status value."""
         unsigned_int = self.get_status_value(idx)
         if unsigned_int > 32767:
             return unsigned_int - 65536
-        else:
-            return unsigned_int
+        return unsigned_int
 
     def get_signed_config_value(self, idx: int):
+        """Set signed config value."""
         unsigned_int = self.get_config_value(idx)
         if unsigned_int > 32767:
             return unsigned_int - 65536
-        else:
-            return unsigned_int
+        return unsigned_int
 
     def get_status_temperature_value(self, idx: int):
+        """Get status temp."""
         return self.get_signed_status_value(idx) / 10
 
     def get_config_temperature_value(self, idx: int):
+        """Get signed config value."""
         return self.get_signed_config_value(idx) / 10
 
     @staticmethod
     def unpack(data):
+        """Unpack."""
         unpacked_data = struct.unpack("!BBH", data[0:4])
         obj = QueryResponse(unpacked_data[0], unpacked_data[1])
         idx = 4
 
-        while idx < data.__len__():
+        while idx < len(data):
             payload = Payload.unpack(data[idx:])
             if payload.subType == 1:
                 obj.__status = payload
@@ -446,23 +521,26 @@ class QueryResponse:
 
 
 def md5_hash(text):
-    """Simple hashing of password"""
+    """Make simple hashing of password."""
     md5 = hashlib.md5()
     md5.update(text.encode())
     return md5.digest()
 
 
 class ConnectionStatus(Enum):
+    """Connectionstatus."""
+
     Disconnected = 0
     Connected = 1
 
 
 class AlsavoSocketCom:
-    """Socket communication handler for the Alsavo Pro integration"""
+    """Socket communication handler for the Alsavo Pro integration."""
 
-    """ Everything is pull-based. """
+    # Everything is pull-based.
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Init."""
         self.serverToken = None
         self.DSIS = None
         self.CSID = None
@@ -473,65 +551,61 @@ class AlsavoSocketCom:
         self.client = None
 
     async def send_and_receive(self, bytes_to_send):
-        _LOGGER.debug(f"send_and_receive())")
-        if self.client is None:
-            raise RuntimeError("UDPClient is not initialized. Call connect() first.")
+        """Send and receive."""
+        _LOGGER.debug("send_and_receive())")
         response = await self.client.send_rcv(bytes_to_send)
-        _LOGGER.debug(f"Received response")
+        _LOGGER.debug("Received response")
         return response
 
     async def send(self, bytes_to_send):
-        _LOGGER.debug(f"send())")
-        if self.client is None:
-            raise RuntimeError("UDPClient is not initialized. Call connect() first.")
+        """Send."""
+        _LOGGER.debug("send())")
         await self.client.send(bytes_to_send)
 
     async def get_auth_challenge(self):
+        """Get auth challenge."""
         auth_intro = AuthIntro(self.clientToken, self.serialQ)
         response = await self.send_and_receive(bytes(auth_intro.pack()))
-        if response is None or len(response) == 0:
-            raise ConnectionError("No response received for auth challenge")
         return AuthChallenge.unpack(response[0])
 
     async def send_auth_response(self, ctx):
+        """Send auth response."""
         resp = AuthResponse(self.CSID, self.DSIS, ctx.digest())
         return await self.send_and_receive(resp.pack())
 
     async def send_and_rcv_packet(self, payload: bytes, cmd=0xF4):
-        _LOGGER.debug(f"send_and_rcv_packet(payload, {cmd})")
+        """Send RCV."""
+        _LOGGER.debug(f"send_and_rcv_packet(payload, {cmd})")  # noqa: G004
         if self.CSID is not None and self.DSIS is not None:
             return await self.send_and_receive(
-                PacketHeader(
-                    0x32, 0, self.CSID, self.DSIS, cmd, payload.__len__()
-                ).pack()
+                PacketHeader(0x32, 0, self.CSID, self.DSIS, cmd, len(payload)).pack()
                 + payload
             )
         return None
 
     async def send_packet(self, payload: bytes, cmd=0xF4):
-        _LOGGER.debug(f"send_packet(payload, {cmd})")
+        """Send packet."""
+        _LOGGER.debug(f"send_packet(payload, {cmd})")  # noqa: G004
         if self.CSID is not None and self.DSIS is not None:
             await self.send(
-                PacketHeader(
-                    0x32, 0, self.CSID, self.DSIS, cmd, payload.__len__()
-                ).pack()
+                PacketHeader(0x32, 0, self.CSID, self.DSIS, cmd, len(payload)).pack()
                 + payload
             )
 
     async def query_all(self):
-        """Query all information from the heat pump"""
+        """Query all information from the heat pump."""
         _LOGGER.debug("socket.query_all")
         resp = await self.send_and_rcv_packet(
             b"\x08\x01\x00\x00\x00\x02\x00\x2e\xff\xff\x00\x00"
         )
         self.lstConfigReqTime = datetime.now()
         if resp is None:
-            raise Exception("query_all: no response")
+            raise Exception("query_all: no response")  # pylint: disable=broad-except  # noqa: TRY002
         return QueryResponse.unpack(resp[0][16:])
 
     async def set_config(self, idx: int, value: int):
-        """Set configuration values on the heat pump"""
-        _LOGGER.debug(f"socket.set_config({idx}, {value})")
+        """Set configuration values on the heat pump."""
+        _LOGGER.debug(f"socket.set_config({idx}, {value})")  # noqa: G004
         idx_h = ((idx >> 8) & 0xFF).to_bytes(1, "big")
         idx_l = (idx & 0xFF).to_bytes(1, "big")
         val_h = ((value >> 8) & 0xFF).to_bytes(1, "big")
@@ -545,6 +619,7 @@ class AlsavoSocketCom:
         )
 
     async def connect(self, server_ip, server_port, serial, password):
+        """Connect."""
         _LOGGER.debug("Connecting to Alsavo Pro")
 
         self.clientToken = random.randint(0, 65535)
@@ -565,7 +640,7 @@ class AlsavoSocketCom:
         self.serverToken = auth_challenge.serverToken
 
         _LOGGER.debug(
-            f"Received handshake, CSID={hex(self.CSID)}, DSID={hex(self.DSIS)}, "
+            f"Received handshake, CSID={hex(self.CSID)}, DSID={hex(self.DSIS)}, "  # noqa: G004
             f"server token {hex(self.serverToken)}"
         )
 
@@ -576,7 +651,7 @@ class AlsavoSocketCom:
 
         response = await self.send_auth_response(ctx)
 
-        if response is None or response[0].__len__() == 0:
+        if response is None or len(response[0]) == 0:
             raise ConnectionError(
                 "Server not responding to auth response, disconnecting."
             )
@@ -585,4 +660,4 @@ class AlsavoSocketCom:
         if act != 0x00000005:
             raise ConnectionError("Server returned error in auth, disconnecting")
 
-        _LOGGER.debug("Connected.")
+        _LOGGER.debug("Connected")
