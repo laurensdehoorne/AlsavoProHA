@@ -37,28 +37,30 @@ class AlsavoPro:
         self._online = False
 
     async def update(self):
-        """Update."""
-        _LOGGER.debug("update")
-        try:
-            await self._session.connect(
-                self._ip_address,
-                int(self._port_no),
-                int(self._serial_no),
-                self._password,
-            )
-            data = await self._session.query_all()
-            if data is not None:
-                self._data = data
-        except Exception as e:  # pylint: disable=broad-except  # noqa: BLE001
-            if self._update_retries < MAX_UPDATE_RETRIES:
-                self._update_retries += 1
-                await self.update()
-                self._online = True
-            else:
-                self._update_retries = 0
-                _LOGGER.error(f"Unable to update: {e}")  # noqa: G004
-                self._online = False
-
+    """Update."""
+    _LOGGER.debug("update")
+    try:
+        await self._session.connect(
+            self._ip_address,
+            int(self._port_no),
+            int(self._serial_no),
+            self._password,
+        )
+        data = await self._session.query_all()
+        if data is not None:
+            self._data = data
+        else:
+            _LOGGER.warning("No data returned from query_all()")
+    except Exception as e:  # noqa: BLE001
+        if self._update_retries < MAX_UPDATE_RETRIES:
+            self._update_retries += 1
+            await self.update()
+            self._online = True
+        else:
+            self._update_retries = 0
+            _LOGGER.error(f"Unable to update: {e}")
+            self._online = False
+            
     async def set_config(self, idx: int, value: int):
         """Config."""
         _LOGGER.debug(f"set_config({idx}, {value})")  # noqa: G004
