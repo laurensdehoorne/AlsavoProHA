@@ -48,11 +48,12 @@ async def validate_input(hass: core.HomeAssistant, name, serial_no, ip_address, 
     # Additional validations (if any) go here...
 
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for Alsavo Pro pool heater integration."""
 
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
+    DOMAIN = DOMAIN
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""

@@ -1,0 +1,11 @@
+{
+    "name": "AlsavoProHA",
+    "content_in_root": false,
+    "filename": "custom_components/AlsavoProHA/__init__.py",
+    "domains": ["AlsavoProHA"],
+    "country": [],
+    "homeassistant": "2022.0.0",
+    "persistent_directory": "custom_components/AlsavoProHA",
+    "render_readme": true,
+    "iot_class": "local_polling"
+}
